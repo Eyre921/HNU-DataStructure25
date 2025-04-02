@@ -4,8 +4,7 @@
 
 using namespace std;
 
-// 递归函数，用于检查是否可以将车厢按正确顺序输出
-void process_output(queue<int>& input_queue, vector<queue<int>>& buffer_queues, int* current_output, int& num_buffers);
+// 递归函数，用于检查是否可以将车厢是输出
 
 // 递归实现输出操作
 void process_output(queue<int>& input_queue, vector<queue<int>>& buffer_queues, int* current_output, int& num_buffers) {
