@@ -9,6 +9,7 @@
 using namespace std;
 
 int main() {
+    //ifstream ifs("D:\\Eyre\\C++\\数据结构\\实验4\\in.txt");  // 打开文件
     ifstream ifs("in.txt");  // 打开文件
     if (!ifs.is_open()) {
         cerr << "Failed to open file." << endl;
@@ -55,5 +56,3 @@ int main() {
 
     return 0;
 }
-/// Created by tiny on 25-4-16.
-//

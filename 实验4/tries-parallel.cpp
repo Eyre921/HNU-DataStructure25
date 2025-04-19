@@ -6,75 +6,69 @@
 #include <algorithm>
 #include <regex>
 #include <thread>
+#include <future>
 #include <mutex>
+#include <atomic>
+#include <map>
 
 using namespace std;
 
-mutex mtx;  // 用于保护共享资源（wordFreq）的互斥量
+mutex mtx;  // 用于保护共享资源 wordFreq
+atomic<int> linesProcessed(0);  // 记录处理的行数
 
-// 词频统计函数
-void process_chunk(const string& chunk, unordered_map<string, int>& wordFreq) {
-    regex wordRegex("[a-zA-Z]+");  // 匹配单词的正则表达式
-    string line;
-    string transformed_chunk = chunk; // Create a temporary string to store the transformed chunk
+void processLine(const string& line, unordered_map<string, int>& wordFreq, const regex& wordRegex) {
+    string lowerLine = line;
+    transform(lowerLine.begin(), lowerLine.end(), lowerLine.begin(), ::tolower);  // 转换为小写
 
-    transform(transformed_chunk.begin(), transformed_chunk.end(), transformed_chunk.begin(), ::tolower);  // 将整个块转换为小写字母
-
-    auto words_begin = sregex_iterator(transformed_chunk.begin(), transformed_chunk.end(), wordRegex);
+    auto words_begin = sregex_iterator(lowerLine.begin(), lowerLine.end(), wordRegex);
     auto words_end = sregex_iterator();
 
-    // 遍历所有匹配到的单词
+    // 临时局部 map，用于存储当前线程中统计的单词频率
+    unordered_map<string, int> localWordFreq;
+
     for (sregex_iterator i = words_begin; i != words_end; ++i) {
         string word = (*i).str();
-        lock_guard<mutex> lock(mtx);  // 确保对共享资源wordFreq的访问是线程安全的
-        wordFreq[word]++;  // 统计单词出现的频率
-    }
-}
-
-// 分割文件并使用多线程处理
-void process_file(const string& filename, unordered_map<string, int>& wordFreq, int numThreads) {
-    ifstream ifs(filename);  // 打开文件
-    if (!ifs.is_open()) {
-        cerr << "Failed to open file." << endl;
-        return;
+        localWordFreq[word]++;  // 统计当前线程中的单词频率
     }
 
-    // 获取文件内容
-    string fileContent((istreambuf_iterator<char>(ifs)), istreambuf_iterator<char>());
-
-    // 文件内容的大小
-    size_t chunkSize = fileContent.size() / numThreads;
-
-    vector<thread> threads;
-    for (int i = 0; i < numThreads; ++i) {
-        size_t start = i * chunkSize;
-        size_t end = (i == numThreads - 1) ? fileContent.size() : (i + 1) * chunkSize;
-        string chunk = fileContent.substr(start, end - start);
-
-        // 启动每个线程处理一个文件块
-        threads.push_back(thread(process_chunk, chunk, ref(wordFreq)));
+    // 合并结果到共享的 wordFreq
+    lock_guard<mutex> lock(mtx);
+    for (const auto& entry : localWordFreq) {
+        wordFreq[entry.first] += entry.second;
     }
 
-    // 等待所有线程完成
-    for (auto& t : threads) {
-        t.join();
-    }
-
-    ifs.close();  // 关闭文件
+    linesProcessed++;  // 计数处理的行数
 }
 
 int main() {
+    //ifstream ifs("D:\\Eyre\\C++\\数据结构\\实验4\\in.txt");  // 打开文件
+    ifstream ifs("in.txt");  // 打开文件
+    if (!ifs.is_open()) {
+        cerr << "Failed to open file." << endl;
+        return -1;
+    }
+
     unordered_map<string, int> wordFreq;  // 存储单词及其频率
+    string line;
+    regex wordRegex("[a-zA-Z]+");  // 匹配单词的正则表达式
 
-    string filename = "in.txt";  // 文件名
-    int numThreads = 4;  // 使用四个线程，机器有四个核心
+    vector<future<void>> futures;  // 用于存储线程的结果
 
-    // 使用多线程处理文件
-    process_file(filename, wordFreq, numThreads);
+    // 使用多线程并行读取文件并处理每一行
+    while (getline(ifs, line)) {
+        futures.push_back(async(launch::async, processLine, line, ref(wordFreq), ref(wordRegex)));
+    }
+
+    // 等待所有线程完成
+    for (auto& fut : futures) {
+        fut.get();
+    }
+
+    ifs.close();  // 关闭文件
 
     // 将unordered_map转换为vector，并按频率排序
     vector<pair<string, int>> sortedWords;
-    for (const auto& entry : wordFreq) {
+    for (const auto &entry : wordFreq) {
         sortedWords.push_back(entry);  // 将unordered_map的每个键值对加入vector
     }
 
@@ -90,5 +84,8 @@ int main() {
         cout << sortedWords[i].first << " " << sortedWords[i].second << endl;
     }
 
+    //cout << "Total lines processed: " << linesProcessed.load() << endl;
+
     return 0;
 }
+// 本代码有一个样例无法通过，出现运行时错误
